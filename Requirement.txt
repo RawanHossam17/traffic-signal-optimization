@@ -1,0 +1,6 @@
+عشان نرن فايل 
+run_30 ده نكتب في التيرمنال
+python -m experiments.run_30
+
+وكذالك في plot.py
+python -m experiments.plot
