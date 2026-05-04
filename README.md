@@ -20,3 +20,6 @@ Run experiments:
 
 Plot results:
    python -m experiments.plot
+
+GUI:
+  py -m streamlit run streamlit_app.py
