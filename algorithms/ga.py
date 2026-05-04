@@ -1,58 +1,69 @@
 import random
 import numpy as np
 from deap import base, creator, tools, algorithms
-from core.individual import Individual
-from core.fitness import calculate_fitness
 from simulation.traffic_simulation import TrafficSimulation
+from core.fitness import calculate_fitness
 
-# 1. Define Fitness and Individual in DEAP
-creator.create("FitnessMin", base.Fitness, weights=(-1.0,))  # minimize fitness
-creator.create("Individual", list, fitness=creator.FitnessMin)
+# Avoid duplicate creator error
+if not hasattr(creator, "FitnessMin"):
+    creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
+if not hasattr(creator, "Individual"):
+    creator.create("Individual", list, fitness=creator.FitnessMin)
 
 toolbox = base.Toolbox()
 
-# 2. Attribute generator: random green time (10–50, rounded to 5)
+# Generate gene (10–60)
 def random_green():
-    g = random.randint(10, 50)
-    return round(g / 5) * 5
+    return random.randint(10, 60)
 
-# 3. Structure initializers
 toolbox.register("attr_int", random_green)
-toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_int, n=6)  # 6 intersections
+toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_int, n=6)
 toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 
-# 4. Evaluation function using your simulation
-sim = TrafficSimulation(num_intersections=6)
+# Evaluation using your fitness
+def evaluate(individual, seed=None):
+    sim = TrafficSimulation(num_intersections=6)
+    class Dummy: pass
+    dummy = Dummy()
+    dummy.genome = list(individual)
+    return (calculate_fitness(dummy, sim),)
 
-def eval_individual(ind):
-    avg_wait, congestion = sim.run(ind, steps=200)
-    fitness = avg_wait + 2 * congestion
-    return (fitness,)  # DEAP expects a tuple
-
-toolbox.register("evaluate", eval_individual)
-
-# 5. Genetic operators
-toolbox.register("mate", tools.cxUniform, indpb=0.5)  # uniform crossover
-toolbox.register("mutate", tools.mutUniformInt, low=10, up=50, indpb=0.2)  # mutation
+toolbox.register("evaluate", evaluate)
 toolbox.register("select", tools.selTournament, tournsize=3)
 
-# 6. GA Execution
-def run_ga(pop_size=20, generations=15):
-    pop = toolbox.population(n=pop_size)
-    hof = tools.HallOfFame(1)  # best individual tracker
-    stats = tools.Statistics(lambda ind: ind.fitness.values)
-    stats.register("avg", np.mean)
-    stats.register("min", np.min)
+# ---------------------------
+# MAIN FUNCTION
+# ---------------------------
+def run_ga(mutation_type=1, crossover_type=1, seed=None):
 
-    algorithms.eaSimple(pop, toolbox, cxpb=0.7, mutpb=0.2, ngen=generations,
-                        stats=stats, halloffame=hof, verbose=True)
+    random.seed(seed)
+    np.random.seed(seed)
 
-    best_solution = hof[0]
-    best_fitness = hof[0].fitness.values[0]
-    return best_solution, best_fitness
+    pop = toolbox.population(n=20)
+    hof = tools.HallOfFame(1)
 
-if __name__ == "__main__":
-    best_solution, best_fitness = run_ga()
-    print("\n===== FINAL RESULT =====")
-    print("Best Solution:", best_solution)
-    print("Best Fitness:", best_fitness)
+    # Choose crossover
+    if crossover_type == 1:
+        toolbox.register("mate", tools.cxUniform, indpb=0.5)
+    else:
+        toolbox.register("mate", tools.cxTwoPoint)
+
+    # Choose mutation
+    if mutation_type == 1:
+        toolbox.register("mutate", tools.mutUniformInt, low=10, up=60, indpb=0.2)
+    else:
+        toolbox.register("mutate", tools.mutShuffleIndexes, indpb=0.2)
+
+    # Run GA
+    algorithms.eaSimple(
+        pop,
+        toolbox,
+        cxpb=0.7,
+        mutpb=0.2,
+        ngen=15,
+        halloffame=hof,
+        verbose=False
+    )
+
+    best = hof[0]
+    return list(best), best.fitness.values[0]
