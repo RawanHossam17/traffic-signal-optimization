@@ -140,7 +140,7 @@ def run_pso():
         record = stats.compile(population)
         logbook.record(gen=generation, evals=len(population), **record)
 
-        print(logbook.stream)
+       # print(logbook.stream)
 
     best_matrix = gbest.reshape(num_intersections, phases_per_intersection)
 
