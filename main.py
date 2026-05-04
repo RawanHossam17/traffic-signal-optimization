@@ -272,22 +272,7 @@ def main():
     # Get user inputs
     params = get_user_inputs()
     
-    # Ask if user wants single run or multiple runs
-    print("\n" + "-" * 40)
-    print("EXPERIMENT MODE")
-    print("-" * 40)
-    print("1) Single run (quick comparison)")
-    print("2) Multiple runs (statistical comparison)")
-    
-    mode = input("Choose (1/2) [default=1]: ") or "1"
-    
-    if mode == "1":
-        # Single run comparison
-        results = run_comparison_experiment(params)
-    else:
-        # Multiple runs
-        num_runs = int(input("Enter number of runs (e.g., 10, 20, 30): ") or "10")
-        results = run_multiple_comparisons(params, num_runs)
+    results = run_comparison_experiment(params)
     
     # Final message
     print("\n" + "=" * 70)
@@ -298,7 +283,6 @@ def main():
     print(f"  • Recombination: {params['recombination_method']}")
     print(f"  • Mutation: {params['mutation_method']}")
     print(f"  • Survivor Selection: {params['replacement_method']}")
-    print("\nThank you for using the Traffic Signal Optimization System!")
 
 
 if __name__ == "__main__":
