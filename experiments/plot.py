@@ -5,7 +5,7 @@ import random
 from algorithms.pso import run_pso
 from algorithms.hybrid import run_hybrid
 from algorithms.ga import run_ga
-
+from simulation.traffic_simulation import TrafficSimulation
 
 # =========================
 # Collect Results
@@ -126,8 +126,81 @@ def plot_results(pso, ga, hybrid):
 
 
 # =========================
+# Collect Metrics
+# =========================
+def collect_metrics(runs=30):
+
+    pso_wait, ga_wait, hybrid_wait = [], [], []
+    pso_cong, ga_cong, hybrid_cong = [], [], []
+
+    for i in range(runs):
+        random.seed(i)
+        np.random.seed(i)
+
+        sim = TrafficSimulation(num_intersections=6)
+
+        # PSO
+        sol, _ = run_pso()
+        avg_wait, cong = sim.run(sol)
+        pso_wait.append(avg_wait)
+        pso_cong.append(cong)
+
+        # GA
+        sol, _ = run_ga(mutation_type=1, crossover_type=1, seed=i)
+        avg_wait, cong = sim.run(sol)
+        ga_wait.append(avg_wait)
+        ga_cong.append(cong)
+
+        # Hybrid
+        sol, _ = run_hybrid(mutation_type=1, crossover_type=1, selection_type=1)
+        avg_wait, cong = sim.run(sol)
+        hybrid_wait.append(avg_wait)
+        hybrid_cong.append(cong)
+
+    return (pso_wait, ga_wait, hybrid_wait,
+            pso_cong, ga_cong, hybrid_cong)
+    
+
+def plot_waiting(pso, ga, hybrid):
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    labels = ["PSO", "GA", "Hybrid"]
+    means = [np.mean(pso), np.mean(ga), np.mean(hybrid)]
+
+    plt.figure()
+    plt.bar(labels, means)
+
+    plt.title("Average Waiting Time Comparison")
+    plt.ylabel("Waiting Time")
+
+    plt.savefig("waiting_time.png", dpi=300)
+    plt.show()
+
+
+def plot_congestion(pso, ga, hybrid):
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    labels = ["PSO", "GA", "Hybrid"]
+    means = [np.mean(pso), np.mean(ga), np.mean(hybrid)]
+
+    plt.figure()
+    plt.bar(labels, means)
+
+    plt.title("Congestion Comparison")
+    plt.ylabel("Congestion")
+
+    plt.savefig("congestion.png", dpi=300)
+    plt.show()
+# =========================
 # Run
 # =========================
 if __name__ == "__main__":
     pso, ga, hybrid = collect_results(30)
     plot_results(pso, ga, hybrid)
+    
+    pso_w, ga_w, hybrid_w, pso_c, ga_c, hybrid_c = collect_metrics(30)
+
+    plot_waiting(pso_w, ga_w, hybrid_w)
+    plot_congestion(pso_c, ga_c, hybrid_c)
