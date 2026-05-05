@@ -13,83 +13,129 @@ from algorithms.pso import run_pso
 from core.fitness import calculate_fitness
 from simulation.traffic_simulation import TrafficSimulation
 
-
-WIDTH = 1280
-HEIGHT = 820
+# ============ SCREEN SETTINGS ============
+WIDTH = 1600
+HEIGHT = 920
 FPS = 60
 
+# ============ ROAD & CAR SETTINGS ============
 INTERSECTIONS = 6
-ROAD_W = 124
+ROAD_W = 130
 CAR_W = 34
-CAR_H = 62
+CAR_H = 58
 CYCLE_LENGTH = 60
-YELLOW_TIME = 5
+YELLOW_TIME = 4
 SIGNAL_SPEED = 0.18
 
-MAP_LEFT = 24
-MAP_RIGHT = 900
-SIDEBAR_X = 928
-SIDEBAR_W = 328
-COL_X = [170, 435, 700]
-ROW_Y = [278, 552]
+# ============ MAP LAYOUT ============
+MAP_LEFT = 30
+MAP_TOP = 50
+MAP_WIDTH = 880
+MAP_HEIGHT = 820
+
+SIDEBAR_X = MAP_LEFT + MAP_WIDTH + 15
+SIDEBAR_W = WIDTH - SIDEBAR_X - 15
+
+INTERSECTION_POSITIONS = [
+    (MAP_LEFT + 100, MAP_TOP + 150),
+    (MAP_LEFT + 380, MAP_TOP + 100),
+    (MAP_LEFT + 700, MAP_TOP + 180),
+    (MAP_LEFT + 150, MAP_TOP + 580),
+    (MAP_LEFT + 450, MAP_TOP + 650),
+    (MAP_LEFT + 680, MAP_TOP + 550),
+]
+
 BASELINE_TIMINGS = [30, 30, 30, 30, 30, 30]
 ASSET_DIR = Path(__file__).parent / "assets"
 SCENARIOS = {
-    "Low": 0.04,
-    "Medium": 0.08,
-    "High": 0.13,
+    "Low": 0.035,
+    "Medium": 0.075,
+    "High": 0.12,
 }
 
-
+# ============ LIGHT & CLEAN COLOR PALETTE ============
 COLORS = {
-    "background": (249, 250, 251),
-    "grass": (231, 245, 235),
-    "grass_dark": (199, 224, 207),
-    "grass_light": (217, 239, 223),
-    "road": (99, 106, 116),
-    "road_dark": (75, 85, 99),
-    "curb": (209, 213, 219),
-    "sidewalk": (229, 231, 235),
-    "lane": (242, 244, 247),
-    "yellow": (245, 158, 11),
-    "panel": (255, 255, 255),
-    "text": (31, 41, 55),
-    "muted": (107, 114, 128),
-    "blue": (37, 99, 235),
-    "red": (239, 68, 68),
-    "green": (34, 197, 94),
-    "amber": (245, 158, 11),
-    "black": (17, 24, 39),
-    "white": (255, 255, 255),
-    "sky": (239, 246, 255),
-    "ui_orange": (245, 158, 11),
-    "border": (229, 231, 235),
+    # Backgrounds - Light and clean
+    "bg_main": (248, 250, 252),
+    "bg_card": (255, 255, 255),
+    "bg_card_light": (250, 251, 253),
+    "bg_panel": (241, 245, 249),
+    "bg_input": (248, 250, 252),
+    "bg_sidebar": (255, 255, 255),
+    
+    # Accent colors - Modern tech
+    "primary": (59, 130, 246),
+    "primary_dark": (37, 99, 235),
+    "primary_light": (96, 165, 250),
+    
+    "success": (34, 197, 94),
+    "warning": (245, 158, 11),
+    "danger": (239, 68, 68),
+    "info": (6, 182, 212),
+    
+    # Text colors
+    "text_main": (15, 23, 42),
+    "text_secondary": (71, 85, 105),
+    "text_muted": (148, 163, 184),
+    "text_accent": (59, 130, 246),
+    
+    # Road colors - Realistic
+    "road": (226, 232, 240),
+    "road_border": (203, 213, 225),
+    "road_line": (100, 116, 139),
+    "road_dashed": (148, 163, 184),
+    "sidewalk": (241, 245, 249),
+    "asphalt": (203, 213, 225),
+    "building": (255, 255, 255),
+    "building_dark": (241, 245, 249),
+    "building_light": (255, 255, 255),
+    
+    # Traffic lights
+    "light_red": (239, 68, 68),
+    "light_yellow": (245, 158, 11),
+    "light_green": (34, 197, 94),
+    "light_off": (203, 213, 225),
+    
+    # Borders and shadows
+    "border": (226, 232, 240),
+    "shadow": (0, 0, 0, 0.08),
 }
-
 
 class FitnessIndividual:
     def __init__(self, genome):
         self.genome = genome
         self.fitness = None
 
-
 class Car:
-    def __init__(self, column, direction, image):
-        self.column = column
+    def __init__(self, road_id, direction, x, y, image, road_type):
+        self.road_id = road_id
         self.direction = direction
-        self.x = lane_x(column, direction)
-        self.y = -CAR_H - random.randint(0, 180) if direction == 1 else HEIGHT + random.randint(0, 180)
-        self.speed = random.uniform(1.8, 2.8)
-        self.target_row = 0 if direction == 1 else len(ROW_Y) - 1
+        self.x = x
+        self.y = y
+        self.speed = random.uniform(1.8, 3.0)
         self.wait_time = 0
         self.stops = 0
         self.was_stopped = False
         self.done = False
         self.image = image
+        self.road_type = road_type
+        self.angle = 0
+        self.update_angle()
 
-    def rect(self):
-        return pygame.Rect(int(self.x), int(self.y), CAR_W, CAR_H)
+    def update_angle(self):
+        if self.road_type == 'horizontal':
+            if self.direction == 1:
+                self.angle = 0
+            else:
+                self.angle = 180
+        else:
+            if self.direction == 1:
+                self.angle = 90
+            else:
+                self.angle = 270
 
+    def get_rotated_image(self):
+        return pygame.transform.rotate(self.image, self.angle)
 
 class TrafficGame:
     def __init__(self, timings, seed=7, density=0.055):
@@ -104,7 +150,34 @@ class TrafficGame:
         self.total_wait = 0
         self.total_stops = 0
         self.car_images = {}
-        self.mode_name = "Baseline fixed 30s"
+        self.mode_name = "Standard Pattern"
+        self.roads = self.create_road_network()
+
+    def create_road_network(self):
+        roads = []
+        connections = [
+            (0, 1), (1, 2), (0, 3), (1, 4), (2, 5), (3, 4), (4, 5)
+        ]
+        for i, (a, b) in enumerate(connections):
+            x1, y1 = INTERSECTION_POSITIONS[a]
+            x2, y2 = INTERSECTION_POSITIONS[b]
+            if abs(x1 - x2) > abs(y1 - y2):
+                roads.append({
+                    'id': i,
+                    'type': 'horizontal',
+                    'start': (min(x1, x2), (y1 + y2)//2),
+                    'end': (max(x1, x2), (y1 + y2)//2),
+                    'intersections': (a, b)
+                })
+            else:
+                roads.append({
+                    'id': i,
+                    'type': 'vertical',
+                    'start': ((x1 + x2)//2, min(y1, y2)),
+                    'end': ((x1 + x2)//2, max(y1, y2)),
+                    'intersections': (a, b)
+                })
+        return roads
 
     def set_images(self, car_images):
         self.car_images = car_images
@@ -124,25 +197,52 @@ class TrafficGame:
     def set_density(self, density):
         self.density = density
 
-    def signal_index(self, column, row):
-        return row * 3 + column
-
-    def light_state(self, column, row):
-        index = self.signal_index(column, row)
+    def light_state(self, intersection_id):
         signal_time = (self.step * SIGNAL_SPEED) % CYCLE_LENGTH
-        green = self.timings[index]
-        if signal_time < green:
+        green_time = self.timings[intersection_id]
+        
+        if signal_time < green_time:
             return "green"
-        if signal_time < green + YELLOW_TIME:
+        elif signal_time < green_time + YELLOW_TIME:
             return "yellow"
-        return "red"
+        else:
+            return "red"
+
+    def car_can_pass(self, car, intersection_id):
+        state = self.light_state(intersection_id)
+        
+        if state == "green":
+            return True
+        elif state == "yellow":
+            return self.rng.random() < 0.3
+        else:
+            return False
 
     def spawn_car(self):
-        column = self.rng.randrange(3)
-        direction = self.rng.choice([1, -1])
-        key = self.rng.choice(list(self.car_images.keys()))
-        image = self.car_images[key][direction]
-        self.cars.append(Car(column, direction, image))
+        if not self.roads:
+            return
+        road = self.rng.choice(self.roads)
+        direction = self.rng.choice([-1, 1])
+        
+        if road['type'] == 'horizontal':
+            if direction == 1:
+                x = road['start'][0] - 120
+                y = road['start'][1] - CAR_H//2
+            else:
+                x = road['end'][0] + 80
+                y = road['end'][1] - CAR_H//2
+        else:
+            if direction == 1:
+                x = road['start'][0] - CAR_W//2
+                y = road['start'][1] - 120
+            else:
+                x = road['end'][0] - CAR_W//2
+                y = road['end'][1] + 80
+                
+        if self.car_images:
+            key = self.rng.choice(list(self.car_images.keys()))
+            image = self.car_images[key]
+            self.cars.append(Car(road['id'], direction, x, y, image, road['type']))
 
     def update(self):
         self.step += 1
@@ -151,107 +251,74 @@ class TrafficGame:
             self.spawn_meter -= 1
             self.spawn_car()
 
-        ordered = sorted(self.cars, key=lambda car: car.y, reverse=True)
-        for car in ordered:
+        for car in self.cars[:]:
             if car.done:
                 continue
-
-            stopped = self.should_stop(car)
-            front = self.nearest_front_car(car)
-            if front and self.close_to_front_car(car, front):
-                stopped = True
-
-            if stopped:
+            
+            road = self.roads[car.road_id]
+            moving = True
+            
+            if road['type'] == 'horizontal':
+                car.x += car.direction * car.speed
+                car.y = road['start'][1] - CAR_H//2
+                
+                for inter_id in road['intersections']:
+                    ix, iy = INTERSECTION_POSITIONS[inter_id]
+                    if abs(car.x + CAR_W//2 - ix) < 35:
+                        if not self.car_can_pass(car, inter_id):
+                            moving = False
+                            car.x -= car.direction * car.speed
+                            break
+            else:
+                car.y += car.direction * car.speed
+                car.x = road['start'][0] - CAR_W//2
+                
+                for inter_id in road['intersections']:
+                    ix, iy = INTERSECTION_POSITIONS[inter_id]
+                    if abs(car.y + CAR_H//2 - iy) < 35:
+                        if not self.car_can_pass(car, inter_id):
+                            moving = False
+                            car.y -= car.direction * car.speed
+                            break
+            
+            if moving:
+                car.was_stopped = False
+                if road['type'] == 'horizontal':
+                    if car.x > road['end'][0] + 150 or car.x < road['start'][0] - 150:
+                        car.done = True
+                        self.completed += 1
+                else:
+                    if car.y > road['end'][1] + 150 or car.y < road['start'][1] - 150:
+                        car.done = True
+                        self.completed += 1
+            else:
                 car.wait_time += 1
                 self.total_wait += 1
                 if not car.was_stopped:
                     car.stops += 1
                     self.total_stops += 1
                 car.was_stopped = True
-            else:
-                car.was_stopped = False
-                car.y += car.direction * car.speed
-                self.update_target(car)
-
-            if car.y > HEIGHT + CAR_H or car.y < -CAR_H * 2:
-                car.done = True
-                self.completed += 1
-
-        self.cars = [car for car in self.cars if not car.done]
-
-    def should_stop(self, car):
-        if car.target_row < 0 or car.target_row >= len(ROW_Y):
-            return False
-
-        row_y = ROW_Y[car.target_row]
-        if car.direction == 1:
-            approaching = car.y + CAR_H >= row_y - 56 and car.y + CAR_H < row_y + 12
-        else:
-            approaching = car.y <= row_y + 56 and car.y > row_y - 12
-
-        if not approaching:
-            return False
-
-        state = self.light_state(car.column, car.target_row)
-        if state == "red":
-            return True
-        if state == "yellow" and self.rng.random() < 0.55:
-            return True
-        return False
-
-    def update_target(self, car):
-        if car.direction == 1 and car.target_row < len(ROW_Y):
-            if car.y > ROW_Y[car.target_row] + 36:
-                car.target_row += 1
-        elif car.direction == -1 and car.target_row >= 0:
-            if car.y + CAR_H < ROW_Y[car.target_row] - 36:
-                car.target_row -= 1
-
-    def nearest_front_car(self, car):
-        candidates = []
-        for other in self.cars:
-            if other is car or other.column != car.column or other.direction != car.direction:
-                continue
-            same_lane = abs(other.x - car.x) < 5
-            in_front = other.y > car.y if car.direction == 1 else other.y < car.y
-            if same_lane and in_front:
-                candidates.append(other)
-        if not candidates:
-            return None
-        return min(candidates, key=lambda other: abs(other.y - car.y))
-
-    def close_to_front_car(self, car, front):
-        distance = abs(front.y - car.y)
-        return 0 < distance < CAR_H + 14
-
-    def queue_lengths(self):
-        queues = [0] * INTERSECTIONS
-        for car in self.cars:
-            if car.was_stopped and 0 <= car.target_row < len(ROW_Y):
-                queues[self.signal_index(car.column, car.target_row)] += 1
-        return queues
+            
+            car.update_angle()
+        
+        self.cars = [c for c in self.cars if not c.done]
 
     def metrics(self):
         active = len(self.cars)
-        queue = sum(self.queue_lengths())
         avg_wait = self.total_wait / max(1, active + self.completed)
-        live_fitness = avg_wait + 2 * queue
+        live_fitness = avg_wait + 0.5 * self.total_stops + 0.2 * active
         return {
             "active": active,
             "completed": self.completed,
             "avg_wait": avg_wait,
-            "queue": queue,
             "stops": self.total_stops,
             "fitness": live_fitness,
+            "throughput": self.completed,
+            "efficiency": (self.completed / max(1, self.step)) * 100
         }
 
-
-def lane_x(column, direction):
-    center = COL_X[column]
-    return center - 42 if direction == 1 else center + 10
-
-
-def draw_text(surface, font, text, x, y, color=COLORS["text"], center=False):
+# ============ DRAWING FUNCTIONS ============
+def draw_text(surface, font, text, x, y, color=COLORS["text_main"], center=False):
     rendered = font.render(text, True, color)
     rect = rendered.get_rect()
     if center:
@@ -260,414 +327,297 @@ def draw_text(surface, font, text, x, y, color=COLORS["text"], center=False):
         rect.topleft = (x, y)
     surface.blit(rendered, rect)
 
+def draw_card(surface, rect, title=None):
+    # Shadow
+    shadow_rect = rect.inflate(4, 4)
+    shadow_surf = pygame.Surface((shadow_rect.w, shadow_rect.h), pygame.SRCALPHA)
+    pygame.draw.rect(shadow_surf, (0, 0, 0, 15), (2, 2, shadow_rect.w-2, shadow_rect.h-2), border_radius=12)
+    surface.blit(shadow_surf, (shadow_rect.x-2, shadow_rect.y-2))
+    
+    # Card background
+    pygame.draw.rect(surface, COLORS["bg_card"], rect, border_radius=12)
+    pygame.draw.rect(surface, COLORS["border"], rect, 1, border_radius=12)
+    
+    if title:
+        pygame.draw.rect(surface, COLORS["primary"], (rect.x, rect.y, rect.w, 3), border_radius=2)
+        draw_text(surface, pygame.font.SysFont("Segoe UI", 16, bold=True), 
+                 title, rect.x + 16, rect.y + 14, COLORS["text_main"])
 
-def fit_text(font, text, max_width):
-    if font.size(text)[0] <= max_width:
-        return text
-    suffix = "..."
-    trimmed = text
-    while trimmed and font.size(trimmed + suffix)[0] > max_width:
-        trimmed = trimmed[:-1]
-    return trimmed + suffix
+def draw_modern_streets(screen, game):
+    screen.fill(COLORS["bg_main"])
+    
+    # Map container with shadow
+    map_container = pygame.Rect(MAP_LEFT - 10, MAP_TOP - 10, MAP_WIDTH + 20, MAP_HEIGHT + 20)
+    shadow_surf = pygame.Surface((map_container.w, map_container.h), pygame.SRCALPHA)
+    pygame.draw.rect(shadow_surf, (0, 0, 0, 20), (4, 4, map_container.w-4, map_container.h-4), border_radius=16)
+    screen.blit(shadow_surf, (map_container.x-2, map_container.y-2))
+    pygame.draw.rect(screen, COLORS["bg_card"], map_container, border_radius=16)
+    pygame.draw.rect(screen, COLORS["border"], map_container, 1, border_radius=16)
+    
+    # Buildings (modern rectangles)
+    for i, (x, y) in enumerate(INTERSECTION_POSITIONS):
+        corners = [(x-85, y-85), (x+35, y-85), (x-85, y+35), (x+35, y+35)]
+        for bx, by in corners:
+            building_w = random.randint(35, 45)
+            building_h = random.randint(35, 45)
+            building = pygame.Rect(bx, by, building_w, building_h)
+            pygame.draw.rect(screen, COLORS["building"], building, border_radius=6)
+            pygame.draw.rect(screen, COLORS["border"], building, 1, border_radius=6)
+            # Windows
+            for wx in range(2):
+                for wy in range(2):
+                    pygame.draw.rect(screen, COLORS["text_muted"], 
+                                   (bx + 8 + wx*15, by + 10 + wy*15, 5, 5), border_radius=1)
+    
+    # Draw roads
+    for road in game.roads:
+        if road['type'] == 'horizontal':
+            start_x, y_center = road['start']
+            end_x, _ = road['end']
+            road_rect = pygame.Rect(min(start_x, end_x) - 10, y_center - ROAD_W//2, 
+                                   abs(end_x - start_x) + 20, ROAD_W)
+            pygame.draw.rect(screen, COLORS["road"], road_rect)
+            pygame.draw.rect(screen, COLORS["road_border"], road_rect, 2)
+            y_line = y_center
+            pygame.draw.line(screen, COLORS["road_line"], 
+                           (min(start_x, end_x) + 20, y_line), 
+                           (max(start_x, end_x) - 20, y_line), 3)
+        else:
+            x_center, start_y = road['start']
+            _, end_y = road['end']
+            road_rect = pygame.Rect(x_center - ROAD_W//2, min(start_y, end_y) - 10, 
+                                   ROAD_W, abs(end_y - start_y) + 20)
+            pygame.draw.rect(screen, COLORS["road"], road_rect)
+            pygame.draw.rect(screen, COLORS["road_border"], road_rect, 2)
+            x_line = x_center
+            pygame.draw.line(screen, COLORS["road_line"], 
+                           (x_line, min(start_y, end_y) + 20), 
+                           (x_line, max(start_y, end_y) - 20), 3)
+    
+    # Intersections
+    for i, (x, y) in enumerate(INTERSECTION_POSITIONS):
+        # Intersection circle
+        pygame.draw.circle(screen, COLORS["asphalt"], (x, y), 45)
+        pygame.draw.circle(screen, COLORS["road_border"], (x, y), 45, 2)
+        # Intersection label
+        label_bg = pygame.Rect(x - 15, y - 12, 30, 24)
+        pygame.draw.rect(screen, COLORS["primary"], label_bg, border_radius=12)
+        draw_text(screen, pygame.font.SysFont("Segoe UI", 14, bold=True), 
+                 str(i+1), x, y, COLORS["bg_card"], center=True)
 
+def draw_modern_signals(screen, game, small_font):
+    for i, (x, y) in enumerate(INTERSECTION_POSITIONS):
+        state = game.light_state(i)
+        
+        # Modern traffic light pole
+        pole_x = x
+        pole_y = y - 65
+        
+        # Slim pole
+        pygame.draw.rect(screen, COLORS["text_muted"], (pole_x - 2, pole_y, 4, 55), border_radius=2)
+        
+        # Modern housing
+        housing = pygame.Rect(pole_x - 14, pole_y - 38, 28, 48)
+        pygame.draw.rect(screen, COLORS["bg_card"], housing, border_radius=8)
+        pygame.draw.rect(screen, COLORS["border"], housing, 1, border_radius=8)
+        
+        # Lights (horizontal arrangement for modern look)
+        light_x_positions = [pole_x - 8, pole_x - 1, pole_x + 6]
+        light_names = ["red", "yellow", "green"]
+        light_colors = [COLORS["light_red"], COLORS["light_yellow"], COLORS["light_green"]]
+        
+        for idx, (name, color, lx) in enumerate(zip(light_names, light_colors, light_x_positions)):
+            active = (state == name)
+            ly = pole_y - 22
+            if active:
+                # Glow effect
+                glow = pygame.Surface((20, 20), pygame.SRCALPHA)
+                glow_color = (*color, 100)
+                pygame.draw.circle(glow, glow_color, (10, 10), 10)
+                screen.blit(glow, (lx - 8, ly - 8))
+            pygame.draw.circle(screen, color if active else COLORS["light_off"], (lx + 4, ly), 6)
+        
+        # Signal number
+        draw_text(screen, small_font, f"S{i+1}", pole_x - 20, pole_y - 15, COLORS["text_accent"])
 
-def draw_panel(surface, rect):
-    shadow = pygame.Surface((rect.w + 12, rect.h + 12), pygame.SRCALPHA)
-    pygame.draw.rect(shadow, (15, 23, 42, 18), (6, 7, rect.w, rect.h), border_radius=18)
-    surface.blit(shadow, (rect.x - 6, rect.y - 6))
-    pygame.draw.rect(surface, COLORS["panel"], rect, border_radius=18)
-    pygame.draw.rect(surface, (238, 242, 247), rect, 1, border_radius=18)
+def draw_cars(screen, game):
+    for car in game.cars:
+        # Shadow
+        shadow_surf = pygame.Surface((CAR_W + 8, CAR_H + 8), pygame.SRCALPHA)
+        pygame.draw.ellipse(shadow_surf, (0, 0, 0, 40), (2, CAR_H - 10, CAR_W + 4, 12))
+        screen.blit(shadow_surf, (int(car.x) - 4, int(car.y) + 5))
+        
+        # Rotated car
+        rotated = car.get_rotated_image()
+        rect = rotated.get_rect(center=(int(car.x) + CAR_W//2, int(car.y) + CAR_H//2))
+        screen.blit(rotated, rect)
 
-
-def create_car_asset(path, body_color):
-    surface = pygame.Surface((CAR_W + 6, CAR_H + 4), pygame.SRCALPHA)
-    shade = tuple(max(0, channel - 45) for channel in body_color)
-    pygame.draw.ellipse(surface, (0, 0, 0, 42), (3, CAR_H - 5, CAR_W, 8))
-    pygame.draw.rect(surface, shade, (7, 10, 25, 47), border_radius=9)
-    pygame.draw.rect(surface, body_color, (4, 4, 31, 51), border_radius=11)
-    pygame.draw.rect(surface, (255, 255, 255, 90), (7, 8, 25, 4), border_radius=2)
-    pygame.draw.polygon(surface, (191, 219, 254), [(8, 15), (31, 15), (27, 29), (12, 29)])
-    pygame.draw.polygon(surface, (219, 234, 254), [(10, 36), (27, 36), (31, 48), (7, 48)])
-    pygame.draw.rect(surface, shade, (7, 30, 25, 4), border_radius=2)
-    pygame.draw.circle(surface, COLORS["black"], (4, 17), 4)
-    pygame.draw.circle(surface, COLORS["black"], (35, 17), 4)
-    pygame.draw.circle(surface, COLORS["black"], (4, 47), 4)
-    pygame.draw.circle(surface, COLORS["black"], (35, 47), 4)
-    pygame.draw.circle(surface, (254, 240, 138), (12, 6), 3)
-    pygame.draw.circle(surface, (254, 240, 138), (27, 6), 3)
-    pygame.image.save(surface, path)
-
-
-def create_asphalt_asset(path):
-    rng = random.Random(14)
-    tile = pygame.Surface((96, 96))
-    tile.fill(COLORS["road"])
-    for _ in range(500):
-        shade = rng.randint(-10, 10)
-        base = max(72, min(124, 104 + shade))
-        color = (base, base + rng.randint(-1, 3), base + rng.randint(-1, 4))
-        x = rng.randrange(96)
-        y = rng.randrange(96)
-        tile.set_at((x, y), color)
-    for _ in range(10):
-        x = rng.randrange(96)
-        y = rng.randrange(96)
-        pygame.draw.line(tile, (90, 96, 103), (x, y), (x + rng.randint(8, 24), y + rng.randint(-2, 2)), 1)
-    pygame.image.save(tile, path)
-
-
-def load_environment_assets():
-    ASSET_DIR.mkdir(exist_ok=True)
-    asphalt_path = ASSET_DIR / "dashboard_asphalt_tile.png"
-    if not asphalt_path.exists():
-        create_asphalt_asset(asphalt_path)
-    asphalt = pygame.image.load(str(asphalt_path))
-    if pygame.display.get_surface() is not None:
-        asphalt = asphalt.convert()
-    return {"asphalt": asphalt}
-
+def draw_sidebar(screen, font, small_font, game, optimized_solution, improvement,
+                 selected_algo, algo_rects, selected_scene, scene_rects,
+                 comparison_results, mouse_pos, message):
+    
+    # Sidebar background
+    sidebar_bg = pygame.Rect(SIDEBAR_X - 5, 0, SIDEBAR_W + 10, HEIGHT)
+    pygame.draw.rect(screen, COLORS["bg_sidebar"], sidebar_bg)
+    pygame.draw.line(screen, COLORS["border"], (SIDEBAR_X, 0), (SIDEBAR_X, HEIGHT), 1)
+    
+    # Header
+    header = pygame.Rect(SIDEBAR_X + 10, 20, SIDEBAR_W - 20, 80)
+    draw_card(screen, header)
+    draw_text(screen, font, "🚦 Traffic Control", SIDEBAR_X + 30, 48, COLORS["primary"])
+    draw_text(screen, small_font, game.mode_name, SIDEBAR_X + 30, 78, COLORS["text_secondary"])
+    
+    # Improvement badge
+    badge_color = COLORS["success"] if improvement > 0 else COLORS["warning"]
+    badge = pygame.Rect(SIDEBAR_X + SIDEBAR_W - 95, 35, 80, 35)
+    pygame.draw.rect(screen, badge_color, badge, border_radius=18)
+    draw_text(screen, small_font, f"{improvement:.0f}%", badge.centerx, badge.centery, COLORS["bg_card"], center=True)
+    
+    # Metrics grid
+    metrics = game.metrics()
+    cards_data = [
+        ("🚗", "Active", metrics["active"], COLORS["info"]),
+        ("⏱️", "Avg Wait", f"{metrics['avg_wait']:.1f}s", COLORS["warning"]),
+        ("🛑", "Stops", metrics["stops"], COLORS["danger"]),
+        ("✅", "Completed", metrics["completed"], COLORS["success"]),
+        ("⚡", "Efficiency", f"{metrics['efficiency']:.0f}%", COLORS["primary"]),
+        ("📊", "Fitness", f"{metrics['fitness']:.0f}", COLORS["text_accent"]),
+    ]
+    
+    card_w = (SIDEBAR_W - 35) // 3
+    card_h = 70
+    
+    for idx, (icon, label, val, color) in enumerate(cards_data):
+        row = idx // 3
+        col = idx % 3
+        x = SIDEBAR_X + 15 + col * (card_w + 8)
+        y = 115 + row * (card_h + 8)
+        rect = pygame.Rect(x, y, card_w, card_h)
+        
+        # Card
+        pygame.draw.rect(screen, COLORS["bg_card"], rect, border_radius=10)
+        pygame.draw.rect(screen, COLORS["border"], rect, 1, border_radius=10)
+        
+        # Colored top line
+        pygame.draw.rect(screen, color, (rect.x, rect.y, rect.w, 3), border_radius=2)
+        
+        draw_text(screen, pygame.font.SysFont("Segoe UI Emoji", 20), icon, rect.x + 12, rect.y + 12)
+        val_font = pygame.font.SysFont("Segoe UI", 22, bold=True)
+        draw_text(screen, val_font, str(val), rect.x + 12, rect.y + 38, color)
+        draw_text(screen, small_font, label, rect.x + 12, rect.y + 58, COLORS["text_muted"])
+    
+    # Signal timings display
+    timing_rect = pygame.Rect(SIDEBAR_X + 15, 320, SIDEBAR_W - 30, 45)
+    pygame.draw.rect(screen, COLORS["bg_panel"], timing_rect, border_radius=10)
+    pygame.draw.rect(screen, COLORS["border"], timing_rect, 1, border_radius=10)
+    timings_str = " | ".join([f"S{i+1}:{int(v)}s" for i, v in enumerate(optimized_solution[:3])])
+    timings_str2 = " | ".join([f"S{i+1}:{int(v)}s" for i, v in enumerate(optimized_solution[3:])])
+    draw_text(screen, small_font, timings_str, timing_rect.centerx, timing_rect.y + 16, COLORS["text_main"], center=True)
+    draw_text(screen, small_font, timings_str2, timing_rect.centerx, timing_rect.y + 32, COLORS["text_main"], center=True)
+    
+    # Algorithm selector
+    algo_panel = pygame.Rect(SIDEBAR_X + 15, 380, SIDEBAR_W - 30, 95)
+    draw_card(screen, algo_panel, "Algorithm")
+    for name, rect in algo_rects.items():
+        hovered = rect.collidepoint(mouse_pos)
+        selected = name == selected_algo
+        bg = COLORS["primary"] if selected else COLORS["bg_input"]
+        if hovered and not selected:
+            bg = COLORS["bg_panel"]
+        pygame.draw.rect(screen, bg, rect, border_radius=8)
+        pygame.draw.rect(screen, COLORS["primary"] if selected else COLORS["border"], rect, 1, border_radius=8)
+        text_color = COLORS["bg_card"] if selected else COLORS["text_secondary"]
+        draw_text(screen, small_font, name, rect.centerx, rect.centery, text_color, center=True)
+    
+    # Scenario selector
+    scene_panel = pygame.Rect(SIDEBAR_X + 15, 490, SIDEBAR_W - 30, 95)
+    draw_card(screen, scene_panel, "Traffic Volume")
+    for name, rect in scene_rects.items():
+        hovered = rect.collidepoint(mouse_pos)
+        selected = name == selected_scene
+        bg = COLORS["primary"] if selected else COLORS["bg_input"]
+        if hovered and not selected:
+            bg = COLORS["bg_panel"]
+        pygame.draw.rect(screen, bg, rect, border_radius=8)
+        pygame.draw.rect(screen, COLORS["primary"] if selected else COLORS["border"], rect, 1, border_radius=8)
+        text_color = COLORS["bg_card"] if selected else COLORS["text_secondary"]
+        draw_text(screen, small_font, name, rect.centerx, rect.centery, text_color, center=True)
+    
+    # Buttons
+    btn_y = 600
+    btns = [("▶ START", COLORS["success"]), ("⏹ STOP", COLORS["danger"]), ("⚡ OPTIMIZE", COLORS["primary"])]
+    btn_w = (SIDEBAR_W - 45) // 3
+    
+    for idx, (label, color) in enumerate(btns):
+        btn_rect = pygame.Rect(SIDEBAR_X + 15 + idx * (btn_w + 8), btn_y, btn_w, 40)
+        hovered = btn_rect.collidepoint(mouse_pos)
+        bg = color if not hovered else tuple(min(255, c + 30) for c in color)
+        pygame.draw.rect(screen, bg, btn_rect, border_radius=10)
+        draw_text(screen, font, label, btn_rect.centerx, btn_rect.centery, COLORS["bg_card"], center=True)
+    
+    # Status
+    status_rect = pygame.Rect(SIDEBAR_X + 15, 655, SIDEBAR_W - 30, 35)
+    pygame.draw.rect(screen, COLORS["bg_panel"], status_rect, border_radius=10)
+    draw_text(screen, small_font, message[:50], status_rect.x + 12, status_rect.centery, COLORS["text_secondary"])
+    
+    # Comparison results
+    if comparison_results:
+        comp_rect = pygame.Rect(SIDEBAR_X + 15, 705, SIDEBAR_W - 30, 160)
+        draw_card(screen, comp_rect, "Algorithm Comparison")
+        y = 745
+        for i, res in enumerate(comparison_results[:3]):
+            row_rect = pygame.Rect(SIDEBAR_X + 20, y-2, SIDEBAR_W - 40, 38)
+            row_bg = COLORS["bg_input"] if i % 2 == 0 else COLORS["bg_card_light"]
+            pygame.draw.rect(screen, row_bg, row_rect, border_radius=8)
+            
+            if i == 0:
+                draw_text(screen, small_font, "🏆", SIDEBAR_X + 30, y+8, COLORS["warning"])
+                draw_text(screen, small_font, res["name"], SIDEBAR_X + 55, y+8, COLORS["success"])
+            else:
+                draw_text(screen, small_font, res["name"], SIDEBAR_X + 30, y+8, COLORS["text_secondary"])
+            
+            draw_text(screen, small_font, f"Fitness: {res['fitness']:.0f}", SIDEBAR_X + 160, y+8, COLORS["text_main"])
+            draw_text(screen, small_font, f"Time: {res['elapsed']:.1f}s", SIDEBAR_X + 280, y+8, COLORS["text_secondary"])
+            y += 42
 
 def load_car_images():
     ASSET_DIR.mkdir(exist_ok=True)
-    custom_paths = sorted(ASSET_DIR.glob("custom_car_*.png"))
-    if custom_paths:
-        images = {}
-        for index, path in enumerate(custom_paths):
-            down = pygame.image.load(str(path))
-            down = pygame.transform.smoothscale(down, (CAR_W + 6, CAR_H + 4))
-            if pygame.display.get_surface() is not None:
-                down = down.convert_alpha()
-            up = pygame.transform.rotate(down, 180)
-            images[f"custom_{index}"] = {1: down, -1: up}
-        return images
-
-    specs = {
-        "red": (220, 38, 38),
-        "orange": (249, 115, 22),
-        "white": (241, 245, 249),
-        "blue": (37, 99, 235),
-    }
-
+    specs = [
+        ("red", (220, 80, 80)),
+        ("white", (255, 255, 255)),
+        ("blue", (80, 120, 220)),
+        ("silver", (200, 205, 210)),
+        ("black", (60, 65, 75)),
+    ]
     images = {}
-    for name, color in specs.items():
-        path = ASSET_DIR / f"realistic_top_car_{name}.png"
+    for name, color in specs:
+        path = ASSET_DIR / f"car_{name}.png"
         if not path.exists():
             create_car_asset(path, color)
-        down = pygame.image.load(str(path))
+        img = pygame.image.load(str(path))
+        img = pygame.transform.smoothscale(img, (CAR_W, CAR_H))
         if pygame.display.get_surface() is not None:
-            down = down.convert_alpha()
-        up = pygame.transform.rotate(down, 180)
-        images[name] = {1: down, -1: up}
+            img = img.convert_alpha()
+        images[name] = img
     return images
 
-
-def blit_tiled(surface, tile, rect):
-    old_clip = surface.get_clip()
-    surface.set_clip(rect)
-    for x in range(rect.left, rect.right, tile.get_width()):
-        for y in range(rect.top, rect.bottom, tile.get_height()):
-            surface.blit(tile, (x, y))
-    surface.set_clip(old_clip)
-
-
-def draw_road_rect(surface, asphalt, rect):
-    pygame.draw.rect(surface, COLORS["curb"], rect.inflate(12, 12), border_radius=12)
-    pygame.draw.rect(surface, COLORS["sidewalk"], rect.inflate(5, 5), border_radius=9)
-    blit_tiled(surface, asphalt, rect)
-    pygame.draw.rect(surface, COLORS["road_dark"], rect, 1, border_radius=6)
-
-
-def draw_crosswalk(surface, x, y):
-    stripe_color = (235, 239, 244)
-    for offset in range(-48, 49, 16):
-        pygame.draw.rect(surface, stripe_color, (x - 62, y + offset - 4, 42, 8), border_radius=1)
-        pygame.draw.rect(surface, stripe_color, (x + 20, y + offset - 4, 42, 8), border_radius=1)
-        pygame.draw.rect(surface, stripe_color, (x + offset - 4, y - 62, 8, 42), border_radius=1)
-        pygame.draw.rect(surface, stripe_color, (x + offset - 4, y + 20, 8, 42), border_radius=1)
-
-
-def draw_city_details(surface):
-    pygame.draw.rect(surface, COLORS["sky"], (MAP_LEFT, 24, MAP_RIGHT - MAP_LEFT, 100), border_radius=18)
-    for x in range(58, MAP_RIGHT - 38, 118):
-        pygame.draw.circle(surface, COLORS["grass_light"], (x, 182), 13)
-        pygame.draw.circle(surface, COLORS["grass_dark"], (x + 7, 179), 8)
-        pygame.draw.rect(surface, (148, 116, 80), (x - 2, 193, 4, 12), border_radius=2)
-
-    for x in range(62, MAP_RIGHT - 80, 164):
-        pygame.draw.rect(surface, (226, 232, 240), (x, 624, 82, 46), border_radius=8)
-        pygame.draw.rect(surface, (203, 213, 225), (x + 10, 636, 62, 4), border_radius=2)
-        pygame.draw.rect(surface, (203, 213, 225), (x + 10, 650, 42, 4), border_radius=2)
-
-
-def draw_roads(surface, environment):
-    surface.fill(COLORS["background"])
-    pygame.draw.rect(surface, COLORS["grass"], (MAP_LEFT, 126, MAP_RIGHT - MAP_LEFT, HEIGHT - 260), border_radius=22)
-    asphalt = environment["asphalt"]
-    draw_city_details(surface)
-
-    for x in COL_X:
-        rect = pygame.Rect(x - ROAD_W // 2, 80, ROAD_W, HEIGHT - 210)
-        draw_road_rect(surface, asphalt, rect)
-        pygame.draw.line(surface, COLORS["yellow"], (x, 96), (x, HEIGHT - 148), 3)
-        for y in range(100, HEIGHT - 160, 70):
-            pygame.draw.line(surface, COLORS["lane"], (x - 34, y), (x - 34, y + 36), 3)
-            pygame.draw.line(surface, COLORS["lane"], (x + 34, y), (x + 34, y + 36), 3)
-
-    for y in ROW_Y:
-        rect = pygame.Rect(70, y - ROAD_W // 2, MAP_RIGHT - 118, ROAD_W)
-        draw_road_rect(surface, asphalt, rect)
-        pygame.draw.line(surface, COLORS["yellow"], (84, y), (MAP_RIGHT - 64, y), 3)
-        for x in range(95, MAP_RIGHT - 90, 80):
-            pygame.draw.line(surface, COLORS["lane"], (x, y - 34), (x + 40, y - 34), 3)
-            pygame.draw.line(surface, COLORS["lane"], (x, y + 34), (x + 40, y + 34), 3)
-
-    for row, y in enumerate(ROW_Y):
-        for column, x in enumerate(COL_X):
-            intersection = pygame.Rect(x - 70, y - 70, 140, 140)
-            blit_tiled(surface, asphalt, intersection)
-            pygame.draw.rect(surface, (88, 93, 99), intersection, 2, border_radius=4)
-            draw_crosswalk(surface, x, y)
-
-
-def draw_signals(surface, game, small_font):
-    for row, y in enumerate(ROW_Y):
-        for column, x in enumerate(COL_X):
-            state = game.light_state(column, row)
-            timing = game.timings[game.signal_index(column, row)]
-            box = pygame.Rect(x + 48, y - 58, 26, 58)
-            pygame.draw.rect(surface, (17, 24, 39), box, border_radius=9)
-            inactive = (55, 65, 81)
-            light_specs = [
-                ("red", COLORS["red"], y - 45),
-                ("yellow", COLORS["amber"], y - 29),
-                ("green", COLORS["green"], y - 13),
-            ]
-            for name, color, cy in light_specs:
-                active = state == name
-                if active:
-                    glow = pygame.Surface((26, 26), pygame.SRCALPHA)
-                    pygame.draw.circle(glow, (*color, 72), (13, 13), 12)
-                    surface.blit(glow, (x + 48, cy - 13))
-                pygame.draw.circle(surface, color if active else inactive, (x + 61, cy), 6)
-                pygame.draw.circle(surface, (255, 255, 255, 54), (x + 59, cy - 2), 2)
-            draw_text(surface, small_font, f"I{row * 3 + column + 1}", x - 38, y - 58, COLORS["white"])
-            draw_text(surface, small_font, f"G={int(round(timing))}", x - 38, y - 38, COLORS["white"])
-
-
-def draw_cars(surface, game):
-    for car in game.cars:
-        shadow = pygame.Surface((CAR_W + 8, CAR_H + 8), pygame.SRCALPHA)
-        pygame.draw.ellipse(shadow, (0, 0, 0, 70), (2, CAR_H - 10, CAR_W + 4, 14))
-        surface.blit(shadow, (int(car.x) - 4, int(car.y) + 2))
-        surface.blit(car.image, (int(car.x), int(car.y)))
-
-
-def draw_hud(surface, game, font, small_font, baseline_fitness, optimized_fitness, optimized_solution, message):
-    metrics = game.metrics()
-    draw_panel(surface, pygame.Rect(24, 20, WIDTH - 48, 88))
-    draw_text(surface, font, "Traffic Signal Optimization System", 46, 36)
-    draw_text(surface, small_font, "AI-powered timing dashboard for a six-intersection traffic network", 48, 68, COLORS["muted"])
-    status_color = COLORS["green"] if len(game.cars) else COLORS["muted"]
-    pygame.draw.circle(surface, status_color, (914, 47), 6)
-    draw_text(surface, small_font, f"Mode: {game.mode_name}", 932, 36, COLORS["text"])
-    timings = " ".join(str(int(round(value))) for value in optimized_solution)
-    draw_text(surface, small_font, f"Signal plan: {timings}", 932, 66, COLORS["muted"])
-
-    improvement = ((baseline_fitness - optimized_fitness) / baseline_fitness * 100) if baseline_fitness else 0
-    return metrics, improvement
-
-
-def draw_stat_card(surface, small_font, title, value, rect, accent):
-    draw_panel(surface, rect)
-    pygame.draw.rect(surface, accent, (rect.x + 14, rect.y + 14, 4, rect.h - 28), border_radius=3)
-    draw_text(surface, small_font, title, rect.x + 28, rect.y + 14, COLORS["muted"])
-    draw_text(surface, small_font, value, rect.x + 28, rect.y + 42, COLORS["text"])
-
-
-def draw_bottom_stats(surface, small_font, metrics, improvement):
-    stats = [
-        ("Active Cars", str(metrics["active"]), COLORS["blue"]),
-        ("Avg Wait", f"{metrics['avg_wait']:.2f}", COLORS["amber"]),
-        ("Queue", str(metrics["queue"]), COLORS["red"]),
-        ("Stops", str(metrics["stops"]), COLORS["muted"]),
-        ("Improvement", f"{improvement:.1f}%", COLORS["green"] if improvement >= 0 else COLORS["red"]),
-    ]
-    card_w = 232
-    for index, (title, value, color) in enumerate(stats):
-        rect = pygame.Rect(36 + index * (card_w + 12), HEIGHT - 94, card_w, 62)
-        draw_stat_card(surface, small_font, title, value, rect, color)
-
-
-def draw_buttons(surface, font, buttons, mouse_pos):
-    for label, rect in buttons.items():
-        primary = label == "Optimize"
-        danger = label == "Stop"
-        success = label == "Start"
-        hovered = rect.collidepoint(mouse_pos)
-        if primary:
-            fill = COLORS["blue"] if not hovered else (59, 130, 246)
-            text_color = COLORS["white"]
-            border = COLORS["blue"]
-        elif success:
-            fill = COLORS["green"] if not hovered else (74, 222, 128)
-            text_color = COLORS["white"]
-            border = COLORS["green"]
-        elif danger:
-            fill = (254, 242, 242) if not hovered else (254, 226, 226)
-            text_color = COLORS["red"]
-            border = (252, 165, 165)
-        else:
-            fill = COLORS["white"] if not hovered else (239, 246, 255)
-            text_color = COLORS["blue"]
-            border = (147, 197, 253)
-
-        pygame.draw.rect(surface, (15, 23, 42, 16), rect.move(2, 3), border_radius=20)
-        pygame.draw.rect(surface, fill, rect, border_radius=20)
-        pygame.draw.rect(surface, border, rect, 1, border_radius=20)
-        draw_text(surface, font, label, rect.centerx, rect.centery, text_color, center=True)
-
-
-def draw_status_message(surface, small_font, message):
-    rect = pygame.Rect(SIDEBAR_X, 524, SIDEBAR_W, 26)
-    pygame.draw.rect(surface, (239, 246, 255), rect, border_radius=13)
-    pygame.draw.circle(surface, COLORS["blue"], (rect.x + 14, rect.centery), 4)
-    text = fit_text(small_font, message, rect.w - 42)
-    draw_text(surface, small_font, text, rect.x + 28, rect.y + 4, COLORS["muted"])
-
-
-def draw_pill_group(surface, small_font, options, selected_value):
-    if options:
-        xs = [rect.x for rect in options.values()]
-        ys = [rect.y for rect in options.values()]
-        rights = [rect.right for rect in options.values()]
-        bottoms = [rect.bottom for rect in options.values()]
-        outer = pygame.Rect(min(xs), min(ys), max(rights) - min(xs), max(bottoms) - min(ys))
-        pygame.draw.rect(surface, (243, 244, 246), outer.inflate(4, 4), border_radius=22)
-    for name, rect in options.items():
-        selected = name == selected_value
-        fill = COLORS["blue"] if selected else (249, 250, 251)
-        border = COLORS["blue"] if selected else (229, 231, 235)
-        text_color = COLORS["white"] if selected else COLORS["text"]
-        pygame.draw.rect(surface, fill, rect, border_radius=18)
-        pygame.draw.rect(surface, border, rect, 1, border_radius=18)
-        draw_text(surface, small_font, name, rect.centerx, rect.centery, text_color, center=True)
-
-
-def draw_algorithm_menu(surface, font, small_font, selected_algorithm, algorithm_rects, selected_scenario, scenario_rects):
-    panel = pygame.Rect(SIDEBAR_X, 126, SIDEBAR_W, 266)
-    draw_panel(surface, panel)
-    draw_text(surface, font, "Control Panel", panel.x + 18, panel.y + 16)
-
-    draw_text(surface, small_font, "Algorithm", panel.x + 18, panel.y + 60, COLORS["muted"])
-    draw_pill_group(surface, small_font, algorithm_rects, selected_algorithm)
-
-    draw_text(surface, small_font, "Traffic level", panel.x + 172, panel.y + 60, COLORS["muted"])
-    draw_pill_group(surface, small_font, scenario_rects, selected_scenario)
-
-
-def draw_insight_panel(surface, font, small_font, baseline_fitness, optimized_fitness, best_algorithm, selected_scenario):
-    panel = pygame.Rect(SIDEBAR_X, 612, 252, 156)
-    draw_panel(surface, panel)
-    improvement = ((baseline_fitness - optimized_fitness) / baseline_fitness * 100) if baseline_fitness else 0
-    title = "Insight"
-    draw_text(surface, font, title, panel.x + 18, panel.y + 16)
-    draw_text(surface, small_font, f"Scenario: {selected_scenario} traffic", panel.x + 18, panel.y + 52, COLORS["muted"])
-    draw_text(surface, small_font, f"{best_algorithm} reduced fitness by", panel.x + 18, panel.y + 82, COLORS["text"])
-    draw_text(surface, font, f"{improvement:.1f}%", panel.x + 18, panel.y + 106, COLORS["green"] if improvement >= 0 else COLORS["red"])
-    draw_text(surface, small_font, "Best timing uses the lowest", panel.x + 118, panel.y + 110, COLORS["muted"])
-    draw_text(surface, small_font, "wait + congestion cost.", panel.x + 118, panel.y + 132, COLORS["muted"])
-
-
-def compare_algorithms():
-    results = []
-    for name in ["PSO", "GA", "Hybrid"]:
-        solution, fitness, elapsed = run_optimizer(name)
-        results.append(
-            {
-                "name": name,
-                "fitness": fitness,
-                "elapsed": elapsed,
-                "timings": [int(round(value)) for value in solution],
-            }
-        )
-    return sorted(results, key=lambda item: item["fitness"])
-
-
-def draw_comparison_panel(surface, font, small_font, results):
-    if not results:
-        return
-
-    panel = pygame.Rect(SIDEBAR_X, 570, 252, 232)
-    draw_panel(surface, panel)
-    draw_text(surface, font, "Comparison", panel.x + 18, panel.y + 16)
-    draw_text(surface, small_font, "Lower fitness is better.", panel.x + 18, panel.y + 48, COLORS["muted"])
-
-    header_y = panel.y + 82
-    draw_text(surface, small_font, "Algorithm", panel.x + 18, header_y, COLORS["text"])
-    draw_text(surface, small_font, "Fitness", panel.x + 124, header_y, COLORS["text"])
-    draw_text(surface, small_font, "Time", panel.x + 194, header_y, COLORS["text"])
-
-    for index, result in enumerate(results):
-        y = header_y + 32 + index * 44
-        row_color = (240, 253, 244) if index == 0 else (248, 250, 252)
-        pygame.draw.rect(surface, row_color, (panel.x + 14, y - 8, panel.w - 28, 38), border_radius=7)
-        draw_text(surface, small_font, result["name"], panel.x + 22, y, COLORS["text"])
-        draw_text(surface, small_font, f"{result['fitness']:.2f}", panel.x + 124, y, COLORS["muted"])
-        draw_text(surface, small_font, f"{result['elapsed']:.1f}s", panel.x + 194, y, COLORS["muted"])
-
-    best = results[0]
-    draw_text(surface, small_font, f"Best: {best['name']}", panel.x + 18, panel.y + 162, COLORS["green"])
-    draw_text(surface, small_font, f"Timings: {best['timings']}", panel.x + 18, panel.y + 182, COLORS["muted"])
-
-
-def draw_line_chart(surface, rect, values, title, color, small_font):
-    pygame.draw.rect(surface, (249, 250, 251), rect, border_radius=10)
-    pygame.draw.rect(surface, COLORS["border"], rect, 1, border_radius=10)
-    draw_text(surface, small_font, title, rect.x + 12, rect.y + 8, COLORS["muted"])
-    if len(values) < 2:
-        draw_text(surface, small_font, "Collecting data...", rect.x + 12, rect.y + 30, COLORS["muted"])
-        return
-
-    chart = pygame.Rect(rect.x + 12, rect.y + 30, rect.w - 24, rect.h - 42)
-    pygame.draw.line(surface, (229, 231, 235), (chart.x, chart.bottom), (chart.right, chart.bottom), 1)
-    min_v = min(values)
-    max_v = max(values)
-    span = max(0.001, max_v - min_v)
-    points = []
-    recent = values[-48:]
-    for index, value in enumerate(recent):
-        x = chart.x + index * chart.w / max(1, len(recent) - 1)
-        y = chart.bottom - ((value - min_v) / span) * chart.h
-        points.append((int(x), int(y)))
-    if len(points) > 1:
-        pygame.draw.lines(surface, color, False, points, 3)
-
-
-def draw_analytics_panel(surface, font, small_font, history, comparison_results, baseline_fitness, optimized_fitness, best_algorithm):
-    panel = pygame.Rect(SIDEBAR_X, 558, SIDEBAR_W, 160)
-    draw_panel(surface, panel)
-    draw_text(surface, font, "Analytics", panel.x + 18, panel.y + 14)
-    draw_line_chart(surface, pygame.Rect(panel.x + 16, panel.y + 44, panel.w - 32, 46), history["fitness"], "Fitness over time", COLORS["blue"], small_font)
-    draw_line_chart(surface, pygame.Rect(panel.x + 16, panel.y + 96, panel.w - 32, 46), history["wait"], "Average wait time", COLORS["green"], small_font)
-
-    if comparison_results:
-        best = comparison_results[0]
-        badge = pygame.Rect(panel.x + panel.w - 98, panel.y + 16, 72, 24)
-        pygame.draw.rect(surface, (220, 252, 231), badge, border_radius=12)
-        draw_text(surface, small_font, f"BEST {best['name']}", badge.centerx, badge.centery, COLORS["green"], center=True)
-        y = panel.y + 142
-        for result in comparison_results[:3]:
-            row = pygame.Rect(panel.x + 16, y, panel.w - 32, 18)
-            fill = (240, 253, 244) if result is best else (249, 250, 251)
-            pygame.draw.rect(surface, fill, row, border_radius=7)
-            draw_text(surface, small_font, result["name"], row.x + 8, row.y + 1, COLORS["text"])
-            draw_text(surface, small_font, f"{result['fitness']:.2f}", row.x + 132, row.y + 1, COLORS["muted"])
-            draw_text(surface, small_font, f"{result['elapsed']:.1f}s", row.x + 226, row.y + 1, COLORS["muted"])
-            y += 20
-    else:
-        improvement = ((baseline_fitness - optimized_fitness) / baseline_fitness * 100) if baseline_fitness else 0
-        draw_text(surface, small_font, f"{best_algorithm}: {improvement:.1f}% improvement", panel.x + 18, panel.y + 142, COLORS["muted"])
-
+def create_car_asset(path, body_color):
+    surf = pygame.Surface((CAR_W, CAR_H), pygame.SRCALPHA)
+    shade = tuple(max(0, c - 60) for c in body_color)
+    # Body
+    pygame.draw.rect(surf, shade, (4, 10, 26, 42), border_radius=8)
+    pygame.draw.rect(surf, body_color, (3, 4, 28, 48), border_radius=10)
+    # Windows
+    pygame.draw.rect(surf, (100, 150, 200, 180), (7, 8, 20, 12), border_radius=3)
+    # Wheels
+    pygame.draw.circle(surf, (30, 35, 45), (8, 50), 5)
+    pygame.draw.circle(surf, (30, 35, 45), (26, 50), 5)
+    pygame.draw.circle(surf, (30, 35, 45), (8, 8), 5)
+    pygame.draw.circle(surf, (30, 35, 45), (26, 8), 5)
+    # Lights
+    pygame.draw.circle(surf, (255, 200, 50), (28, 12), 2)
+    pygame.draw.circle(surf, (255, 100, 100), (28, 46), 2)
+    pygame.image.save(surf, path)
 
 def run_optimizer(name):
     start = time.time()
@@ -677,131 +627,116 @@ def run_optimizer(name):
         solution, fitness = run_ga(mutation_type=1, crossover_type=1, seed=42)
     else:
         solution, fitness = run_hybrid(mutation_type=1, crossover_type=1, selection_type=1, seed=42)
-    return [float(value) for value in solution], float(fitness), time.time() - start
-
+    return [float(v) for v in solution], float(fitness), time.time() - start
 
 def calculate_project_fitness(timings):
     simulation = TrafficSimulation(num_intersections=6)
     individual = FitnessIndividual(timings)
     return float(calculate_fitness(individual, simulation))
 
+def compare_algorithms():
+    results = []
+    for name in ["PSO", "GA", "Hybrid"]:
+        solution, fitness, elapsed = run_optimizer(name)
+        results.append({"name": name, "fitness": fitness, "elapsed": elapsed, "timings": [int(round(v)) for v in solution]})
+    return sorted(results, key=lambda x: x["fitness"])
 
 def main():
+    global game
+    
     if pygame is None:
-        print("Pygame is not installed. Install it with: pip install pygame-ce")
+        print("Pygame not installed. Install: pip install pygame-ce")
         return
 
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption("Traffic Signal Timing Simulator")
+    pygame.display.set_caption("Smart Traffic Signal Optimization System")
     clock = pygame.time.Clock()
 
-    font = pygame.font.SysFont("Inter, Poppins, Segoe UI", 22, bold=True)
-    small_font = pygame.font.SysFont("Inter, Poppins, Segoe UI", 16)
+    font = pygame.font.SysFont("Segoe UI", 16, bold=True)
+    small_font = pygame.font.SysFont("Segoe UI", 12)
+    
     car_images = load_car_images()
-    environment = load_environment_assets()
-
-    game = TrafficGame(BASELINE_TIMINGS, seed=7, density=0.08)
+    game = TrafficGame(BASELINE_TIMINGS, seed=7, density=0.075)
     game.set_images(car_images)
 
     optimized_solution = BASELINE_TIMINGS[:]
     baseline_fitness = calculate_project_fitness(BASELINE_TIMINGS)
     optimized_fitness = baseline_fitness
-    message = "Choose a traffic level, then start the simulation or optimize the signal timings."
+    message = "System ready | Select algorithm and traffic level"
     simulation_active = False
     comparison_results = []
     selected_algorithm = "Hybrid"
     selected_scenario = "Medium"
-    best_algorithm = "Baseline"
-    history = {"fitness": [], "wait": []}
-    frame_count = 0
-
-    buttons = {
-        "Start": pygame.Rect(SIDEBAR_X + 18, 414, 140, 42),
-        "Stop": pygame.Rect(SIDEBAR_X + 170, 414, 140, 42),
-        "Optimize": pygame.Rect(SIDEBAR_X + 18, 474, 292, 42),
+    
+    algo_rects = {
+        "PSO": pygame.Rect(SIDEBAR_X + 30, 420, 85, 32),
+        "GA": pygame.Rect(SIDEBAR_X + 125, 420, 85, 32),
+        "Hybrid": pygame.Rect(SIDEBAR_X + 220, 420, 85, 32),
     }
-    algorithm_rects = {
-        "PSO": pygame.Rect(SIDEBAR_X + 18, 216, 132, 34),
-        "GA": pygame.Rect(SIDEBAR_X + 18, 258, 132, 34),
-        "Hybrid": pygame.Rect(SIDEBAR_X + 18, 300, 132, 34),
+    
+    scene_rects = {
+        "Low": pygame.Rect(SIDEBAR_X + 30, 530, 85, 32),
+        "Medium": pygame.Rect(SIDEBAR_X + 125, 530, 85, 32),
+        "High": pygame.Rect(SIDEBAR_X + 220, 530, 85, 32),
     }
-    scenario_rects = {
-        "Low": pygame.Rect(SIDEBAR_X + 172, 216, 138, 34),
-        "Medium": pygame.Rect(SIDEBAR_X + 172, 258, 138, 34),
-        "High": pygame.Rect(SIDEBAR_X + 172, 300, 138, 34),
-    }
+    
     running = True
     while running:
+        mouse_pos = pygame.mouse.get_pos()
+        
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                pos = pygame.mouse.get_pos()
-                for name, rect in algorithm_rects.items():
-                    if rect.collidepoint(pos):
+                running = False            
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                for name, rect in algo_rects.items():
+                    if rect.collidepoint(mouse_pos):
                         selected_algorithm = name
-                        message = f"{name} selected. Press Optimize to update the timing plan."
-
-                for name, rect in scenario_rects.items():
-                    if rect.collidepoint(pos):
+                        message = f"{name} algorithm selected"
+                for name, rect in scene_rects.items():
+                    if rect.collidepoint(mouse_pos):
                         selected_scenario = name
                         game.set_density(SCENARIOS[name])
                         game.reset(game.timings, game.mode_name)
-                        history = {"fitness": [], "wait": []}
-                        simulation_active = False
-                        message = f"{name} traffic selected."
-
-                for label, rect in buttons.items():
-                    if not rect.collidepoint(pos):
-                        continue
-                    if label == "Start":
-                        simulation_active = True
-                        message = "Simulation running. Cars are moving through the six-intersection network."
-                    elif label == "Stop":
-                        simulation_active = False
-                        message = "Simulation paused."
-                    else:
-                        algorithm = selected_algorithm
-                        message = f"Running {algorithm} optimizer..."
-                        pygame.display.set_caption(message)
-                        comparison_results = compare_algorithms()
-                        selected_result = next(result for result in comparison_results if result["name"] == algorithm)
-                        optimized_solution = [float(value) for value in selected_result["timings"]]
-                        optimized_fitness = selected_result["fitness"]
-                        best_algorithm = algorithm
-                        game.reset(optimized_solution, f"{algorithm} optimized")
-                        history = {"fitness": [], "wait": []}
-                        simulation_active = True
-                        message = f"{algorithm} finished in {selected_result['elapsed']:.2f}s. Optimized signal timings are active."
-                        pygame.display.set_caption("Traffic Signal Timing Simulator")
-
+                        message = f"{name} traffic volume selected"
+                
+                btn_y = 600
+                btn_w = (SIDEBAR_W - 45) // 3
+                for i in range(3):
+                    btn_rect = pygame.Rect(SIDEBAR_X + 15 + i * (btn_w + 8), btn_y, btn_w, 40)
+                    if btn_rect.collidepoint(mouse_pos):
+                        if i == 0:
+                            simulation_active = True
+                            message = "Simulation running | Traffic flow active"
+                        elif i == 1:
+                            simulation_active = False
+                            message = "Simulation paused"
+                        else:
+                            message = f"Running {selected_algorithm} optimization..."
+                            comparison_results = compare_algorithms()
+                            selected = next(r for r in comparison_results if r["name"] == selected_algorithm)
+                            optimized_solution = [float(v) for v in selected["timings"]]
+                            optimized_fitness = selected["fitness"]
+                            game.reset(optimized_solution, f"{selected_algorithm}")
+                            simulation_active = True
+                            message = f"{selected_algorithm} complete | New timings active"
+        
         if simulation_active:
             game.update()
-            frame_count += 1
-            if frame_count % 8 == 0:
-                live = game.metrics()
-                history["fitness"].append(live["fitness"])
-                history["wait"].append(live["avg_wait"])
-                history["fitness"] = history["fitness"][-72:]
-                history["wait"] = history["wait"][-72:]
-
-        draw_roads(screen, environment)
-        draw_signals(screen, game, small_font)
+        
+        draw_modern_streets(screen, game)
+        draw_modern_signals(screen, game, small_font)
         draw_cars(screen, game)
-        metrics, improvement = draw_hud(screen, game, font, small_font, baseline_fitness, optimized_fitness, optimized_solution, message)
-        draw_algorithm_menu(screen, font, small_font, selected_algorithm, algorithm_rects, selected_scenario, scenario_rects)
-        mouse_pos = pygame.mouse.get_pos()
-        draw_buttons(screen, font, buttons, mouse_pos)
-        draw_status_message(screen, small_font, message)
-        draw_analytics_panel(screen, font, small_font, history, comparison_results, baseline_fitness, optimized_fitness, best_algorithm)
-        draw_bottom_stats(screen, small_font, metrics, improvement)
-
+        
+        improvement = ((baseline_fitness - optimized_fitness) / baseline_fitness * 100) if baseline_fitness else 0
+        draw_sidebar(screen, font, small_font, game, optimized_solution, improvement,
+                    selected_algorithm, algo_rects, selected_scenario, scene_rects,
+                    comparison_results, mouse_pos, message)
+        
         pygame.display.flip()
         clock.tick(FPS)
-
+    
     pygame.quit()
-
 
 if __name__ == "__main__":
     main()
