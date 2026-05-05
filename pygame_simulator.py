@@ -211,19 +211,23 @@ class TrafficGame:
     def set_density(self, density):
         self.density = density
 
-    def light_state(self, intersection_id):
-        signal_time = (self.step * SIGNAL_SPEED) % CYCLE_LENGTH
-        green_time = self.timings[intersection_id]
-        
-        if signal_time < green_time:
-            return "green"
-        elif signal_time < green_time + YELLOW_TIME:
-            return "yellow"
-        else:
-            return "red"
+    def light_state(self, intersection_id, road_type="horizontal"):
+        green_time = max(10, float(self.timings[intersection_id]))
+        cycle_length = green_time * 2 + YELLOW_TIME * 2
+        signal_time = (self.step * SIGNAL_SPEED) % cycle_length
 
-    def car_can_pass(self, car, intersection_id):
-        state = self.light_state(intersection_id)
+        horizontal_active = road_type == "horizontal"
+
+        if signal_time < green_time:
+            return "green" if horizontal_active else "red"
+        if signal_time < green_time + YELLOW_TIME:
+            return "yellow" if horizontal_active else "red"
+        if signal_time < green_time + YELLOW_TIME + green_time:
+            return "red" if horizontal_active else "green"
+        return "red" if horizontal_active else "yellow"
+
+    def car_can_pass(self, car, intersection_id, road_type):
+        state = self.light_state(intersection_id, road_type)
         
         if state == "green":
             return True
@@ -242,49 +246,77 @@ class TrafficGame:
         # Top-to-bottom traffic uses the left lane; bottom-to-top uses the right lane.
         return x_center - LANE_OFFSET if direction == 1 else x_center + LANE_OFFSET
 
-    def has_close_front_car(self, car, road):
-        safe_gap = 74
-        for other in self.cars:
-            if other is car or other.road_id != car.road_id or other.direction != car.direction:
-                continue
+    def front_sensor_rect(self, car, distance=86):
+        rect = car.collision_rect()
+        if car.road_type == 'horizontal':
+            if car.direction == 1:
+                return pygame.Rect(rect.right, rect.y - 8, distance, rect.h + 16)
+            return pygame.Rect(rect.x - distance, rect.y - 8, distance, rect.h + 16)
 
-            if road['type'] == 'horizontal':
-                distance = (other.x - car.x) * car.direction
-            else:
-                distance = (other.y - car.y) * car.direction
+        if car.direction == 1:
+            return pygame.Rect(rect.x - 8, rect.bottom, rect.w + 16, distance)
+        return pygame.Rect(rect.x - 8, rect.y - distance, rect.w + 16, distance)
 
-            if 0 < distance < safe_gap:
-                return True
-        return False
-
-    def would_collide(self, car, next_x, next_y):
-        next_rect = car.collision_rect_at(next_x, next_y).inflate(4, 4)
+    def has_vehicle_ahead(self, car):
+        sensor = self.front_sensor_rect(car)
         for other in self.cars:
             if other is car or other.done:
                 continue
-
-            same_lane = other.road_id == car.road_id and other.direction == car.direction
-            if same_lane:
-                road = self.roads[car.road_id]
-                if road['type'] == 'horizontal':
-                    distance = (other.x - car.x) * car.direction
-                else:
-                    distance = (other.y - car.y) * car.direction
-                if distance <= 0:
-                    continue
-
-            other_rect = other.collision_rect().inflate(4, 4)
-            if next_rect.colliderect(other_rect):
+            if sensor.colliderect(other.collision_rect()):
                 return True
         return False
+
+    def is_past_stop_line(self, car, stop_line):
+        rect = car.collision_rect()
+        if car.road_type == 'horizontal':
+            return rect.left > stop_line if car.direction == 1 else rect.right < stop_line
+        return rect.top > stop_line if car.direction == 1 else rect.bottom < stop_line
+
+    def distance_to_stop_line(self, car, stop_line):
+        rect = car.collision_rect()
+        if car.road_type == 'horizontal':
+            return stop_line - rect.right if car.direction == 1 else rect.left - stop_line
+        return stop_line - rect.bottom if car.direction == 1 else rect.top - stop_line
+
+    def stop_line_for(self, car, intersection_id):
+        x, y = INTERSECTION_POSITIONS[intersection_id]
+        margin = ROAD_W // 2 + 4
+        if car.road_type == 'horizontal':
+            return x - margin if car.direction == 1 else x + margin
+        return y - margin if car.direction == 1 else y + margin
+
+    def should_stop_for_signal(self, car, road):
+        for inter_id in road['intersections']:
+            stop_line = self.stop_line_for(car, inter_id)
+            if self.is_past_stop_line(car, stop_line):
+                continue
+            distance = self.distance_to_stop_line(car, stop_line)
+            if 0 < distance < 72 and not self.car_can_pass(car, inter_id, road['type']):
+                return True
+        return False
+
+    def same_movement_lane(self, car, other):
+        if other.done or other.road_type != car.road_type or other.direction != car.direction:
+            return False
+        if car.road_type == 'horizontal':
+            return abs(other.y - car.y) < 8
+        return abs(other.x - car.x) < 8
 
     def spawn_space_is_clear(self, road, direction, x, y):
         probe = pygame.Rect(0, 0, CAR_W, CAR_H)
         probe.center = (int(x + CAR_W // 2), int(y + CAR_H // 2))
         probe = probe.inflate(90, 90)
         for other in self.cars:
-            if other.road_id != road['id'] or other.direction != direction:
+            if other.road_type != road['type'] or other.direction != direction:
                 continue
+            if road['type'] == 'horizontal':
+                lane_center = self.lane_position(road, direction)
+                if abs((other.y + CAR_H // 2) - lane_center) >= 8:
+                    continue
+            else:
+                lane_center = self.lane_position(road, direction)
+                if abs((other.x + CAR_W // 2) - lane_center) >= 8:
+                    continue
             if probe.colliderect(other.collision_rect()):
                 return False
         return True
@@ -335,41 +367,19 @@ class TrafficGame:
             road = self.roads[car.road_id]
             moving = True
 
-            if self.has_close_front_car(car, road):
+            if self.has_vehicle_ahead(car) or self.should_stop_for_signal(car, road):
                 moving = False
             
             if moving and road['type'] == 'horizontal':
                 next_x = car.x + car.direction * car.speed
                 next_y = self.lane_position(road, car.direction) - CAR_H//2
-                if self.would_collide(car, next_x, next_y):
-                    moving = False
-                else:
-                    car.x = next_x
-                    car.y = next_y
-                
-                    for inter_id in road['intersections']:
-                        ix, iy = INTERSECTION_POSITIONS[inter_id]
-                        if abs(car.x + CAR_H//2 - ix) < 35:
-                            if not self.car_can_pass(car, inter_id):
-                                moving = False
-                                car.x -= car.direction * car.speed
-                                break
+                car.x = next_x
+                car.y = next_y
             elif moving:
                 next_y = car.y + car.direction * car.speed
                 next_x = self.lane_position(road, car.direction) - CAR_W//2
-                if self.would_collide(car, next_x, next_y):
-                    moving = False
-                else:
-                    car.y = next_y
-                    car.x = next_x
-                
-                    for inter_id in road['intersections']:
-                        ix, iy = INTERSECTION_POSITIONS[inter_id]
-                        if abs(car.y + CAR_H//2 - iy) < 35:
-                            if not self.car_can_pass(car, inter_id):
-                                moving = False
-                                car.y -= car.direction * car.speed
-                                break
+                car.y = next_y
+                car.x = next_x
             
             if moving:
                 car.was_stopped = False
@@ -603,40 +613,28 @@ def draw_modern_streets(screen, game):
 
 
 def draw_modern_signals(screen, game, small_font):
-    for i, (x, y) in enumerate(INTERSECTION_POSITIONS):
-        state = game.light_state(i)
-        
-        # Modern traffic light pole
-        pole_x = x
-        pole_y = y - 65
-        
-        # Slim pole
-        pygame.draw.rect(screen, COLORS["text_muted"], (pole_x - 2, pole_y, 4, 55), border_radius=2)
-        
-        # Modern housing
-        housing = pygame.Rect(pole_x - 14, pole_y - 38, 28, 48)
-        pygame.draw.rect(screen, COLORS["bg_card"], housing, border_radius=8)
+    def draw_signal_box(cx, cy, state, label):
+        housing = pygame.Rect(cx - 14, cy - 24, 28, 48)
+        pygame.draw.rect(screen, (255, 255, 255), housing, border_radius=8)
         pygame.draw.rect(screen, COLORS["border"], housing, 1, border_radius=8)
-        
-        # Lights (horizontal arrangement for modern look)
-        light_x_positions = [pole_x - 8, pole_x - 1, pole_x + 6]
-        light_names = ["red", "yellow", "green"]
-        light_colors = [COLORS["light_red"], COLORS["light_yellow"], COLORS["light_green"]]
-        
-        for idx, (name, color, lx) in enumerate(zip(light_names, light_colors, light_x_positions)):
-            active = (state == name)
-            ly = pole_y - 22
+        lights = [
+            ("red", COLORS["light_red"], cy - 13),
+            ("yellow", COLORS["light_yellow"], cy),
+            ("green", COLORS["light_green"], cy + 13),
+        ]
+        for name, color, ly in lights:
+            active = state == name
             if active:
-                # Glow effect
-                glow = pygame.Surface((20, 20), pygame.SRCALPHA)
-                glow_color = (*color, 100)
-                pygame.draw.circle(glow, glow_color, (10, 10), 10)
-                screen.blit(glow, (lx - 8, ly - 8))
-            pygame.draw.circle(screen, color if active else COLORS["light_off"], (lx + 4, ly), 6)
-        
-        # Signal number
-        draw_text(screen, small_font, f"S{i+1}", pole_x - 20, pole_y - 15, COLORS["text_accent"])
+                glow = pygame.Surface((24, 24), pygame.SRCALPHA)
+                pygame.draw.circle(glow, (*color, 100), (12, 12), 12)
+                screen.blit(glow, (cx - 12, ly - 12))
+            pygame.draw.circle(screen, color if active else COLORS["light_off"], (cx, ly), 6)
+        draw_text(screen, small_font, label, cx, housing.y - 12, COLORS["text_accent"], center=True)
 
+    for i, (x, y) in enumerate(INTERSECTION_POSITIONS):
+        visible_state = game.light_state(i, "vertical")
+        pygame.draw.rect(screen, COLORS["text_muted"], (x - 2, y - 88, 4, 64), border_radius=2)
+        draw_signal_box(x, y - 90, visible_state, f"S{i + 1}")
 def draw_cars(screen, game):
     for car in game.cars:
         # Shadow
@@ -888,7 +886,17 @@ def main():
                 for name, rect in algo_rects.items():
                     if rect.collidepoint(mouse_pos):
                         selected_algorithm = name
-                        message = f"{name} algorithm selected"
+                        existing_result = next((result for result in comparison_results if result["name"] == name), None)
+                        if existing_result:
+                            optimized_solution = [float(value) for value in existing_result["timings"]]
+                            optimized_fitness = existing_result["fitness"]
+                            game.reset(optimized_solution, name)
+                            history = {"fitness": [], "wait": []}
+                            frame_count = 0
+                            simulation_active = True
+                            message = f"{name} timings applied"
+                        else:
+                            message = f"{name} algorithm selected | Press Optimize to apply timings"
                 for name, rect in scene_rects.items():
                     if rect.collidepoint(mouse_pos):
                         selected_scenario = name
