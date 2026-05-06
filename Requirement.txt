@@ -4,3 +4,5 @@ python -m experiments.run_30
 
 وكذالك في plot.py
 python -m experiments.plot
+
+python pygame_simulator.py
