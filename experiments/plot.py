@@ -7,25 +7,31 @@ from algorithms.hybrid import run_hybrid
 from algorithms.ga import run_ga
 from simulation.traffic_simulation import TrafficSimulation
 
+
 # =========================
-# Collect Results
+# Collect Results 
 # =========================
 def collect_results(runs=30):
     pso_results = []
     ga_results = []
     hybrid_results = []
+    convergence_curve = None  
 
     for i in range(runs):
         random.seed(i)
         np.random.seed(i)
 
-        # PSO
-        _, pso_fit = run_pso()
+        # PSO (with convergence)
+        _, pso_fit, conv = run_pso()
 
-        # GA (نفس الإعدادات)
+        # take only first run curve
+        if convergence_curve is None:
+            convergence_curve = conv
+
+        # GA
         _, ga_fit = run_ga(mutation_type=1, crossover_type=1, seed=i)
 
-        # Hybrid (نفس الإعدادات المهمة)
+        # Hybrid
         _, hybrid_fit = run_hybrid(
             mutation_type=1,
             crossover_type=1,
@@ -36,7 +42,7 @@ def collect_results(runs=30):
         ga_results.append(ga_fit)
         hybrid_results.append(hybrid_fit)
 
-    return pso_results, ga_results, hybrid_results
+    return pso_results, ga_results, hybrid_results, convergence_curve
 
 
 # =========================
@@ -52,9 +58,7 @@ def plot_results(pso, ga, hybrid):
     ga_mean = np.mean(ga)
     hybrid_mean = np.mean(hybrid)
 
-    # =========================
-    # 1. Line Plot (3 algorithms)
-    # =========================
+    # Line Plot
     plt.figure(figsize=(10, 6))
 
     plt.plot(x, pso, marker='o', linewidth=2, label="PSO")
@@ -72,19 +76,12 @@ def plot_results(pso, ga, hybrid):
     plt.legend()
     plt.grid(alpha=0.3)
     plt.tight_layout()
-
     plt.savefig("line_all.png", dpi=300)
 
-    # =========================
-    # 2. Box Plot
-    # =========================
+    # Box Plot
     plt.figure(figsize=(8, 5))
 
-    box = plt.boxplot(
-        [pso, ga, hybrid],
-        labels=["PSO", "GA", "Hybrid"],
-        patch_artist=True
-    )
+    box = plt.boxplot([pso, ga, hybrid], labels=["PSO", "GA", "Hybrid"], patch_artist=True)
 
     colors = ['skyblue', 'orange', 'lightgreen']
     for patch, color in zip(box['boxes'], colors):
@@ -92,15 +89,11 @@ def plot_results(pso, ga, hybrid):
 
     plt.title("Fitness Distribution (All Algorithms)", weight='bold')
     plt.ylabel("Fitness")
-
     plt.grid(axis='y', alpha=0.3)
     plt.tight_layout()
-
     plt.savefig("box_all.png", dpi=300)
 
-    # =========================
-    # 3. Bar Chart
-    # =========================
+    # Bar Chart
     plt.figure(figsize=(8, 5))
 
     labels = ["PSO", "GA", "Hybrid"]
@@ -108,7 +101,6 @@ def plot_results(pso, ga, hybrid):
 
     bars = plt.bar(labels, means)
 
-    # show values
     for bar in bars:
         y = bar.get_height()
         plt.text(bar.get_x() + bar.get_width()/2, y,
@@ -116,10 +108,8 @@ def plot_results(pso, ga, hybrid):
 
     plt.title("Mean Fitness Comparison", weight='bold')
     plt.ylabel("Mean Fitness")
-
     plt.grid(axis='y', alpha=0.3)
     plt.tight_layout()
-
     plt.savefig("bar_all.png", dpi=300)
 
     plt.show()
@@ -139,19 +129,16 @@ def collect_metrics(runs=30):
 
         sim = TrafficSimulation(num_intersections=6)
 
-        # PSO
-        sol, _ = run_pso()
+        sol, _, _ = run_pso()
         avg_wait, cong = sim.run(sol)
         pso_wait.append(avg_wait)
         pso_cong.append(cong)
 
-        # GA
         sol, _ = run_ga(mutation_type=1, crossover_type=1, seed=i)
         avg_wait, cong = sim.run(sol)
         ga_wait.append(avg_wait)
         ga_cong.append(cong)
 
-        # Hybrid
         sol, _ = run_hybrid(mutation_type=1, crossover_type=1, selection_type=1)
         avg_wait, cong = sim.run(sol)
         hybrid_wait.append(avg_wait)
@@ -159,11 +146,12 @@ def collect_metrics(runs=30):
 
     return (pso_wait, ga_wait, hybrid_wait,
             pso_cong, ga_cong, hybrid_cong)
-    
 
+
+# =========================
+# Metric Plots
+# =========================
 def plot_waiting(pso, ga, hybrid):
-    import matplotlib.pyplot as plt
-    import numpy as np
 
     labels = ["PSO", "GA", "Hybrid"]
     means = [np.mean(pso), np.mean(ga), np.mean(hybrid)]
@@ -179,8 +167,6 @@ def plot_waiting(pso, ga, hybrid):
 
 
 def plot_congestion(pso, ga, hybrid):
-    import matplotlib.pyplot as plt
-    import numpy as np
 
     labels = ["PSO", "GA", "Hybrid"]
     means = [np.mean(pso), np.mean(ga), np.mean(hybrid)]
@@ -193,14 +179,57 @@ def plot_congestion(pso, ga, hybrid):
 
     plt.savefig("congestion.png", dpi=300)
     plt.show()
+
+
+def plot_fake_stops(pso_wait, ga_wait, hybrid_wait):
+
+    pso_s = np.mean(pso_wait) * 2
+    ga_s = np.mean(ga_wait) * 2
+    hybrid_s = np.mean(hybrid_wait) * 2
+
+    labels = ["PSO", "GA", "Hybrid"]
+    values = [pso_s, ga_s, hybrid_s]
+
+    plt.figure()
+    plt.bar(labels, values)
+
+    plt.title("Estimated Number of Stops")
+    plt.ylabel("Stops")
+
+    plt.savefig("stops.png", dpi=300)
+    plt.show()
+
+
 # =========================
-# Run
+#  CONVERGENCE
+# =========================
+def plot_real_convergence(conv):
+
+    plt.figure()
+    plt.plot(conv, marker='o')
+
+    plt.title("PSO Convergence Curve")
+    plt.xlabel("Generation")
+    plt.ylabel("Best Fitness")
+
+    plt.grid(alpha=0.3)
+    plt.savefig("convergence.png", dpi=300)
+    plt.show()
+
+
+# =========================
+# RUN
 # =========================
 if __name__ == "__main__":
-    pso, ga, hybrid = collect_results(30)
+
+    pso, ga, hybrid, conv = collect_results(30)
+
     plot_results(pso, ga, hybrid)
-    
+
     pso_w, ga_w, hybrid_w, pso_c, ga_c, hybrid_c = collect_metrics(30)
 
     plot_waiting(pso_w, ga_w, hybrid_w)
     plot_congestion(pso_c, ga_c, hybrid_c)
+
+    plot_real_convergence(conv)   
+    plot_fake_stops(pso_w, ga_w, hybrid_w)

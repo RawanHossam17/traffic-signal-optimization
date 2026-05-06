@@ -112,6 +112,7 @@ def run_pso():
 
     gbest = None
 
+    convergence = []   
     for generation in range(MAX_GEN):
 
         #  Dynamic Inertia Weight
@@ -133,6 +134,9 @@ def run_pso():
                 gbest = creator.Particle(particle)
                 gbest.fitness.values = (fitness,)
 
+      
+        convergence.append(gbest.fitness.values[0])
+
         #  Update swarm
         for particle in population:
             toolbox.update(particle, gbest, W)
@@ -140,12 +144,10 @@ def run_pso():
         record = stats.compile(population)
         logbook.record(gen=generation, evals=len(population), **record)
 
-       # print(logbook.stream)
-
     best_matrix = gbest.reshape(num_intersections, phases_per_intersection)
 
-    return best_matrix.flatten().tolist(), gbest.fitness.values[0]
-
+  
+    return best_matrix.flatten().tolist(), gbest.fitness.values[0], convergence
 
 if __name__ == "__main__":
     run_pso()

@@ -22,7 +22,7 @@ def run_hybrid(mutation_type=1, crossover_type=1, selection_type=1, seed=None):
     # =========================
     # Step 1: PSO 
     # =========================
-    best_solution, best_fitness = run_pso()
+    best_solution, best_fitness, _ = run_pso()
 
     sim = TrafficSimulation(num_intersections=6)
     init = Initialization()

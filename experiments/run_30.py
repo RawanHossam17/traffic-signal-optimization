@@ -26,7 +26,8 @@ def run_experiments():
 
         print(f"[Run {i+1}/30] ", end="")
 
-        _, pso_fit = run_pso()
+        # === Normal run ===
+        _, pso_fit, _ = run_pso()
         _, ga_fit = run_ga(mutation_type=1, crossover_type=1, seed=i)
         _, hybrid_fit = run_hybrid(
             mutation_type=1,
@@ -34,6 +35,23 @@ def run_experiments():
             selection_type=1
         )
 
+        # === DEBUG  ===
+        if i == 0:
+            sol_pso, _, _ = run_pso()
+            sol_ga, _ = run_ga(mutation_type=1, crossover_type=1, seed=i)
+            sol_hybrid, _ = run_hybrid(
+                mutation_type=1,
+                crossover_type=1,
+                selection_type=1
+            )
+
+            print("\n--- Sample Solutions ---")
+            print("PSO:", sol_pso)
+            print("GA:", sol_ga)
+            print("Hybrid:", sol_hybrid)
+            print("------------------------\n")
+
+        
         pso_results.append(pso_fit)
         ga_results.append(ga_fit)
         hybrid_results.append(hybrid_fit)
@@ -54,7 +72,6 @@ def run_experiments():
     print(f"GA     => Mean: {ga_mean:.2f} | Std: {ga_std:.2f}")
     print(f"Hybrid => Mean: {hybrid_mean:.2f} | Std: {hybrid_std:.2f}")
 
-    
     results = [
         ("PSO", pso_mean),
         ("GA", ga_mean),
@@ -67,7 +84,6 @@ def run_experiments():
 
     print("\n" + "-"*40)
 
- 
     if abs(best_value - second_value) < 0.1:
         print(">>> No clear winner (results are very close)")
     else:
