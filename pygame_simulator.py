@@ -19,7 +19,7 @@ HEIGHT = 920
 FPS = 60
 
 # ============ ROAD & CAR SETTINGS ============
-INTERSECTIONS = 6
+INTERSECTIONS = 3
 ROAD_W = 130
 CAR_W = 34
 CAR_H = 58
@@ -38,14 +38,13 @@ SIDEBAR_X = MAP_LEFT + MAP_WIDTH + 15
 SIDEBAR_W = WIDTH - SIDEBAR_X - 15
 
 INTERSECTION_POSITIONS = [
-    (MAP_LEFT + 140, MAP_TOP + 180),
-    (MAP_LEFT + 440, MAP_TOP + 180),
-    (MAP_LEFT + 740, MAP_TOP + 180),
-    (MAP_LEFT + 140, MAP_TOP + 620),
-    (MAP_LEFT + 440, MAP_TOP + 620),
-    (MAP_LEFT + 740, MAP_TOP + 620),
+    (MAP_LEFT + 140, MAP_TOP + 400),
+    (MAP_LEFT + 440, MAP_TOP + 400),
+    (MAP_LEFT + 740, MAP_TOP + 400),
 ]
 
+# 3 intersections x 2 phases:
+# [I1_NS, I1_EW, I2_NS, I2_EW, I3_NS, I3_EW]
 BASELINE_TIMINGS = [30, 30, 30, 30, 30, 30]
 ASSET_DIR = Path(__file__).parent / "assets"
 SCENARIOS = {
@@ -169,28 +168,23 @@ class TrafficGame:
 
     def create_road_network(self):
         roads = []
-        connections = [
-            (0, 1), (1, 2), (0, 3), (1, 4), (2, 5), (3, 4), (4, 5)
-        ]
-        for i, (a, b) in enumerate(connections):
-            x1, y1 = INTERSECTION_POSITIONS[a]
-            x2, y2 = INTERSECTION_POSITIONS[b]
-            if abs(x1 - x2) > abs(y1 - y2):
-                roads.append({
-                    'id': i,
-                    'type': 'horizontal',
-                    'start': (min(x1, x2), (y1 + y2)//2),
-                    'end': (max(x1, x2), (y1 + y2)//2),
-                    'intersections': (a, b)
-                })
-            else:
-                roads.append({
-                    'id': i,
-                    'type': 'vertical',
-                    'start': ((x1 + x2)//2, min(y1, y2)),
-                    'end': ((x1 + x2)//2, max(y1, y2)),
-                    'intersections': (a, b)
-                })
+        y = INTERSECTION_POSITIONS[0][1]
+        roads.append({
+            'id': 0,
+            'type': 'horizontal',
+            'start': (INTERSECTION_POSITIONS[0][0], y),
+            'end': (INTERSECTION_POSITIONS[-1][0], y),
+            'intersections': tuple(range(INTERSECTIONS)),
+        })
+
+        for index, (x, y) in enumerate(INTERSECTION_POSITIONS, start=1):
+            roads.append({
+                'id': index,
+                'type': 'vertical',
+                'start': (x, MAP_TOP + 20),
+                'end': (x, MAP_TOP + MAP_HEIGHT - 20),
+                'intersections': (index - 1,),
+            })
         return roads
 
     def set_images(self, car_images):
@@ -212,19 +206,21 @@ class TrafficGame:
         self.density = density
 
     def light_state(self, intersection_id, road_type="horizontal"):
-        green_time = max(10, float(self.timings[intersection_id]))
-        cycle_length = green_time * 2 + YELLOW_TIME * 2
+        phase_index = intersection_id * 2
+        ns_time = max(10, float(self.timings[phase_index]))
+        ew_time = max(10, float(self.timings[phase_index + 1]))
+        cycle_length = ns_time + ew_time + YELLOW_TIME * 2
         signal_time = (self.step * SIGNAL_SPEED) % cycle_length
 
         horizontal_active = road_type == "horizontal"
 
-        if signal_time < green_time:
-            return "green" if horizontal_active else "red"
-        if signal_time < green_time + YELLOW_TIME:
-            return "yellow" if horizontal_active else "red"
-        if signal_time < green_time + YELLOW_TIME + green_time:
+        if signal_time < ns_time:
             return "red" if horizontal_active else "green"
-        return "red" if horizontal_active else "yellow"
+        if signal_time < ns_time + YELLOW_TIME:
+            return "red" if horizontal_active else "yellow"
+        if signal_time < ns_time + YELLOW_TIME + ew_time:
+            return "green" if horizontal_active else "red"
+        return "yellow" if horizontal_active else "red"
 
     def car_can_pass(self, car, intersection_id, road_type):
         state = self.light_state(intersection_id, road_type)
@@ -632,9 +628,14 @@ def draw_modern_signals(screen, game, small_font):
         draw_text(screen, small_font, label, cx, housing.y - 12, COLORS["text_accent"], center=True)
 
     for i, (x, y) in enumerate(INTERSECTION_POSITIONS):
-        visible_state = game.light_state(i, "vertical")
+        ns_state = game.light_state(i, "vertical")
+        ew_state = game.light_state(i, "horizontal")
+
         pygame.draw.rect(screen, COLORS["text_muted"], (x - 2, y - 88, 4, 64), border_radius=2)
-        draw_signal_box(x, y - 90, visible_state, f"S{i + 1}")
+        draw_signal_box(x, y - 90, ns_state, f"I{i + 1} NS")
+
+        pygame.draw.rect(screen, COLORS["text_muted"], (x - 88, y - 2, 64, 4), border_radius=2)
+        draw_signal_box(x - 90, y, ew_state, f"I{i + 1} EW")
 def draw_cars(screen, game):
     for car in game.cars:
         # Shadow
@@ -692,8 +693,8 @@ def draw_sidebar(screen, font, small_font, game, optimized_solution, improvement
     timing_rect = pygame.Rect(SIDEBAR_X + 15, 292, SIDEBAR_W - 30, 66)
     draw_card(screen, timing_rect)
     draw_text(screen, small_font, "Signal Timing Plan", timing_rect.x + 16, timing_rect.y + 12, COLORS["text_secondary"])
-    first = "   ".join([f"S{i+1}: {int(v)}s" for i, v in enumerate(optimized_solution[:3])])
-    second = "   ".join([f"S{i+4}: {int(v)}s" for i, v in enumerate(optimized_solution[3:])])
+    first = "   ".join([f"I{i+1} NS:{int(optimized_solution[i * 2])}s" for i in range(INTERSECTIONS)])
+    second = "   ".join([f"I{i+1} EW:{int(optimized_solution[i * 2 + 1])}s" for i in range(INTERSECTIONS)])
     draw_text(screen, small_font, first, timing_rect.x + 16, timing_rect.y + 34, COLORS["text_main"])
     draw_text(screen, small_font, second, timing_rect.x + 16, timing_rect.y + 50, COLORS["text_main"])
 
